@@ -70,31 +70,31 @@ cli.main(function(args, options) {
     var backups = getAll();
     if(!backups.lastFull) {
       cli.debug('No full backup found, skip deletion.');
-      return;
+    } else {
+      var lastFull = moment(backups.lastFull, dateFormat);
+      var maxAge = moment().subtract('days', options.clear);
+
+      backups.all.forEach(function(data) {
+        var d = moment(data.dateStr, dateFormat);
+
+        // keep all files newer lastFull
+        if(d.isAfter(lastFull) || d.dateStr == backups.lastFull) {
+          cli.debug(data.file + ' is newer than last fullbackup, skipping.');
+          return;
+        }
+
+        // delete only files older options.clear days
+        if(d.isBefore( maxAge )) {
+          cli.debug('Delete file ' + data.file);
+          fs.unlinkSync(options.outputDir + data.file);
+        } else {
+          cli.debug(data.file + ' is not olden than ' + options.clear + ' days, skipping.');
+        }
+      });
     }
-    var lastFull = moment(backups.lastFull, dateFormat);
-    var maxAge = moment().subtract('days', options.clear);
-
-    backups.all.forEach(function(data) {
-      var d = moment(data.dateStr, dateFormat);
-
-      // keep all files newer lastFull
-      if(d.isAfter(lastFull) || d.dateStr == backups.lastFull) {
-        cli.debug(data.file + ' is newer than last fullbackup, skipping.');
-        return;
-      }
-
-      // delete only files older options.clear days
-      if(d.isBefore( maxAge )) {
-        cli.debug('Delete file ' + data.file);
-        fs.unlinkSync(options.outputDir + data.file);
-      } else {
-        cli.debug(data.file + ' is not olden than ' + options.clear + ' days, skipping.');
-      }
-    });
   }
 
-  if(options.auto >= 0 && options.auto !== null) {
+  if(options.auto !== null) {
     var backups = getAll();
     if(!backups.lastFull || moment(backups.lastFull, dateFormat).isBefore( moment().subtract('days', options.auto) )) {
       cli.debug('Creating new full backup');
@@ -107,10 +107,12 @@ cli.main(function(args, options) {
 
 
   if(options.inc) {
+    cli.debug('Creating new full backup');
     createInc();
   }
 
   if(options.full) {
+    cli.debug('Creating new incremental backup');
     createFull();
   }
 
