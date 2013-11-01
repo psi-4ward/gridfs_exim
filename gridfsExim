@@ -13,7 +13,8 @@ cli.parse({
   clear:      ['c', 'Clear all backups older than given days', 'int'],
   outputDir:  ['o', 'Set the output directory for the dump-files', 'string', '.'],
   host:       ['h', 'The MongoDB Hostname', 'string', 'localhost'],
-  port:       ['p', 'The MongoDB Port', 'int', 27017]
+  port:       ['p', 'The MongoDB Port', 'int', 27017],
+  gzip:       ['z', 'Compress the output using gzip', 'bool']
 });
 
 cli.main(function(args, options) {
@@ -43,7 +44,7 @@ cli.main(function(args, options) {
       lastInc: false
     };
     files.forEach(function(file) {
-      var m = file.match(new RegExp('^' + options.db + '-(full|inc)-([0-9]+)-fs\.files\.json$','i'));
+      var m = file.match(new RegExp('^' + options.db + '-(full|inc)-([0-9]+)-fs\.files\.json(\.gz)?$','i'));
       if(m) {
         var data = {
           file: file,
