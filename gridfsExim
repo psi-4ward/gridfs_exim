@@ -1,0 +1,149 @@
+#!/usr/bin/nodejs
+
+var cli = require('cli').enable('status');
+var fs = require('fs');
+var GridFsDump = require('./lib/GridFsDump.js');
+var moment = require('moment');
+
+cli.parse({
+  db:         ['d', 'The Database to Dump', 'string'],
+  inc:        ['i', 'Make a incremental backup', 'bool', false],
+  full:       ['f', 'Make a full backup', 'bool', false],
+  auto:       ['a', 'Make a incremental backup or a full backup if last full is older than the given days', 'int'],
+  clear:      ['c', 'Clear all backups older than given days', 'int'],
+  outputDir:  ['o', 'Set the output directory for the dump-files', 'string', '.'],
+  host:       ['h', 'The MongoDB Hostname', 'string', 'localhost'],
+  port:       ['p', 'The MongoDB Port', 'int', 27017]
+});
+
+cli.main(function(args, options) {
+  if(!options.db) {
+    cli.getUsage(1);
+  }
+
+  if(options.inc + options.full + Boolean(options.auto) > 1) {
+    cli.fatal('You can not combine --inc --full or --auto!');
+  }
+
+  // Filename $DB-(full|inc)-YYYYmmddHHiiss-(fs.files|fs.chunks).json
+
+  var dateFormat = 'YYYYMMDDHHmmss';
+
+  if(options.outputDir.substr(options.outputDir.length-1,1) != '/') options.outputDir += '/';
+  var currDate = moment().format(dateFormat);
+
+
+  function getAll() {
+    var files = fs.readdirSync((options.outputDir));
+    var ret = {
+      inc: [],
+      full: [],
+      all: [],
+      lastFull: false,
+      lastInc: false
+    };
+    files.forEach(function(file) {
+      var m = file.match(new RegExp('^' + options.db + '-(full|inc)-([0-9]+)-fs\.files\.json$','i'));
+      if(m) {
+        var data = {
+          file: file,
+          type: m[1],
+          dateStr: m[2]
+        };
+        if(m[1] == 'full') {
+          ret.full.push(data);
+          var d = parseInt(m[2]);
+          if(d > ret.lastFull) ret.lastFull = d;
+        }
+        if(m[1] == 'inc') {
+          ret.inc.push(data);
+          var d = parseInt(m[2]);
+          if(d > ret.lastInc) ret.lastInc = d;
+        }
+        ret.all.push(data);
+      }
+    });
+    return ret;
+  }
+
+  if(options.clear) {
+    var backups = getAll();
+    if(!backups.lastFull) {
+      cli.debug('No full backup found, skip deletion.');
+      return;
+    }
+    var lastFull = moment(backups.lastFull, dateFormat);
+    var maxAge = moment().subtract('days', options.clear);
+
+    backups.all.forEach(function(data) {
+      var d = moment(data.dateStr, dateFormat);
+
+      // keep all files newer lastFull
+      if(d.isAfter(lastFull) || d.dateStr == backups.lastFull) {
+        cli.debug(data.file + ' is newer than last fullbackup, skipping.');
+        return;
+      }
+
+      // delete only files older options.clear days
+      if(d.isBefore( maxAge )) {
+        cli.debug('Delete file ' + data.file);
+        fs.unlinkSync(options.outputDir + data.file);
+      } else {
+        cli.debug(data.file + ' is not olden than ' + options.clear + ' days, skipping.');
+      }
+    });
+  }
+
+  if(options.auto >= 0 && options.auto !== null) {
+    var backups = getAll();
+    if(!backups.lastFull || moment(backups.lastFull, dateFormat).isBefore( moment().subtract('days', options.auto) )) {
+      cli.debug('Creating new full backup');
+      createFull();
+    } else {
+      cli.debug('Creating new incremental backup');
+      createInc();
+    }
+  }
+
+
+  if(options.inc) {
+    createInc();
+  }
+
+  if(options.full) {
+    createFull();
+  }
+
+
+  function createFull() {
+    options.filePrefix = options.db + '-full-' + currDate + '-';
+    GridFsDump(options, function(err) {
+      if(err) {
+        cli.fatal(err);
+      }
+      cli.ok('Dump completed');
+    })
+  }
+
+  function createInc() {
+    var lastInc = getAll()['lastInc'];
+    var lastFull = getAll()['lastFull'];
+    if(!lastInc) lastInc = lastFull;
+    var d = false;
+    if(lastInc > lastFull) d = lastInc;
+    else d = lastFull;
+    if(!d) {
+      cli.fatal('No recent backup found! You have to do a full dump first!');
+    }
+    options.filePrefix = options.db + '-inc-' + currDate + '-';
+    options.query = { 'uploadDate': {'$gt': moment(d, dateFormat).toDate() } };
+    GridFsDump(options, function(err) {
+      if(err) {
+        cli.fatal(err);
+      }
+      cli.ok('Dump completed');
+    });
+  }
+
+
+});
