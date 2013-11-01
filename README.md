@@ -9,9 +9,9 @@ run `npm install` in the root dir
 
 ## Examples
 
-Create a full backup
+Create a full backup and gzip the output
 ```
-./gridfsExim --full --db testdb --outputDir /var/backups/gridfs  --debug
+./gridfsExim --full --db testdb --outputDir /var/backups/gridfs --gzip --debug
 ```
 
 Create a incremental backup
@@ -26,7 +26,7 @@ Delete all backup-files older than 60 days but keep at least one fullbackup with
 ```
 
 ## TODO
-* Importer
+* Importer, you can use `mongoimport -d DATABASE -c COLLECTION --file FILE` until its implemented
 
 License: http://www.gnu.org/licenses/lgpl-3.0.html LGPL <br>
 Author: Christoph Wiechert [4ward.media](http://www.4wardmedia.de)
