@@ -14,17 +14,20 @@ cli.parse({
   outputDir:  ['o', 'Set the output directory for the dump-files', 'string', '.'],
   host:       ['h', 'The MongoDB Hostname', 'string', 'localhost'],
   port:       ['p', 'The MongoDB Port', 'int', 27017],
-  gzip:       ['z', 'Compress the output using gzip', 'bool']
+  gzip:       ['z', 'Compress the output using gzip', 'bool'],
+  'import':   ['import', 'Import a fulldump fs.files file with all chunks and all following incrementals', 'string']
 });
 
 cli.main(function(args, options) {
-  if(!options.db) {
+  if(!options.db && !options.import) {
     cli.getUsage(1);
   }
 
   if(options.inc + options.full + Boolean(options.auto) > 1) {
     cli.fatal('You can not combine --inc --full or --auto!');
   }
+
+  if(!options.outputDir) options.outputDir('.');
 
   // Filename $DB-(full|inc)-YYYYmmddHHiiss-(fs.files|fs.chunks).json
 
@@ -33,9 +36,9 @@ cli.main(function(args, options) {
   if(options.outputDir.substr(options.outputDir.length-1,1) != '/') options.outputDir += '/';
   var currDate = moment().format(dateFormat);
 
-
-  function getAll() {
-    var files = fs.readdirSync((options.outputDir));
+  function getAll(dir) {
+    if(!dir) dir = options.outputDir;
+    var files = fs.readdirSync((dir));
     var ret = {
       inc: [],
       full: [],
@@ -66,6 +69,11 @@ cli.main(function(args, options) {
     });
     return ret;
   }
+
+  if(options.import) {
+    require('./lib/importer.js')(options, getAll);
+  }
+
 
   if(options.clear) {
     var backups = getAll();
